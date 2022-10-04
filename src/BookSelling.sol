@@ -16,6 +16,7 @@ contract BookSelling is Ownable{
     address constant USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
     address constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
     uint256 deliveryFee; // in USD equivalent
+    uint256 nonce;
 
     mapping(address => bool) public supportedTokens;
     mapping(uint256 => uint256) public bookIdsToPrices; // in USD equivalent
@@ -41,13 +42,14 @@ contract BookSelling is Ownable{
         Customer customer;
     }
 
-    event order (uint256[], uint256[], uint256[], uint256, Customer);
-    event payment (address, address, uint256);
+    event order (uint256, uint256[], uint256[], uint256[], uint256, Customer);
+    event invoice (address, address, uint256, uint256);
 
     constructor() Ownable() {
         setEditionsBagourd(0xfaa2A775b035314e9Ac10C2938D28E2554D70792);
         setSupportedTokens();
         setDeliveryFee(10);
+        addBook(1, "Up From Slavery", 14, 10);
     }
 
     function setEditionsBagourd(address a) public onlyOwner {
@@ -76,15 +78,25 @@ contract BookSelling is Ownable{
         bookIdsToStocks[bookId] = quantity;
     }
 
+    function updateQuantities(uint256[] memory bookIds, uint256[] memory quantities) internal {
+        for (uint i = 0; i < bookIds.length; i++) {
+            bookIdsToStocks[bookIds[i]] -= quantities[i];
+        }
+    }
+
     function addBook(uint256 bookId, string memory title, uint256 price, uint256 quantity)  public onlyOwner  {
         Book memory book = Book(bookId, price, title);
-        bookIdsToStocks[bookId] = quantity;
+        bookIdsToStocks[bookId] += quantity;
         bookIdsToPrices[bookId] = price;
         bookIdsToBooks[bookId] = book;
     }
 
     function setDeliveryFee(uint256 fee) public onlyOwner {
         deliveryFee = fee;
+    }
+
+    function getDeliveryFee() public view returns(uint256) {
+        return deliveryFee;
     }
 
     function getPrices(uint256[] memory bookIds)
@@ -130,13 +142,13 @@ contract BookSelling is Ownable{
         checkBooksAreAvailable(bookIds, quantities);
         uint256[] memory prices = getPrices(bookIds);
         uint256 date = block.timestamp;
-        emit order(bookIds, prices, quantities, date, c);
+        uint256 orderId = getID();
+        emit order(orderId, bookIds, prices, quantities, date, c);
         uint256 amount = getAmountToPay(bookIds, quantities);
         erc20.safeTransferFrom(msg.sender, editionsBagourd, amount);
-        emit payment(msg.sender, editionsBagourd, amount);
+        emit invoice(msg.sender, editionsBagourd, amount, orderId);
+        updateQuantities(bookIds, quantities);
     }
-
-    
 
     function sumProd(uint256[] memory array1, uint256[] memory array2)
         public pure
@@ -148,5 +160,9 @@ contract BookSelling is Ownable{
             result += array1[i] * array2[i];
         }
         return result;
+    }
+
+    function getID() internal returns (uint256) {
+        return uint256(keccak256(abi.encodePacked(block.number,msg.sender, nonce++)));
     }
 }
