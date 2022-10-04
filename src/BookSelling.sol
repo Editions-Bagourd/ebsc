@@ -10,45 +10,22 @@ contract BookSelling is Ownable{
     using SafeERC20 for IERC20;
 
 
-    
-    //address public owner;
     address public editionsBagourd;
     address public customer;
     address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address constant USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
     address constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
-    uint256 deliveryFee;
+    uint256 deliveryFee; // in USD equivalent
 
     mapping(address => bool) public supportedTokens;
-    mapping(uint256 => uint256) public bookIdsToPrices;
+    mapping(uint256 => uint256) public bookIdsToPrices; // in USD equivalent
+    mapping(uint256 => uint256) public bookIdsToStocks;
+    mapping(uint256 => Book) public bookIdsToBooks;
 
-
-
-    constructor() public Ownable() {
-        //owner=msg.sender;
-    }
-
-    function setEditionsBagourd(address a) public onlyOwner {
-        editionsBagourd=a;
-        setSupportedTokens();
-        setPrice(1,1);
-        setPrice(2,1);
-        setPrice(3,1);
-        setDeliveryFee(10);
-    }
-
-    function setSupportedTokens() public onlyOwner {
-        supportedTokens[USDC]=true;
-        supportedTokens[USDT]=true;
-        supportedTokens[DAI]=true;
-    }
-
-    function setPrice(uint256 bookId, uint256 price) public onlyOwner {
-        bookIdsToPrices[bookId] = price;
-    }
-
-    function setDeliveryFee(uint256 fee) public onlyOwner {
-        deliveryFee = fee;
+    struct Book {
+        uint256 bookId;
+        uint256 price;
+        string title;
     }
 
     struct Customer {
@@ -64,9 +41,54 @@ contract BookSelling is Ownable{
         Customer customer;
     }
 
+    event order (uint256[], uint256[], uint256[], uint256, Customer);
+    event payment (address, address, uint256);
+
+    constructor() Ownable() {
+        setEditionsBagourd(0xfaa2A775b035314e9Ac10C2938D28E2554D70792);
+        setSupportedTokens();
+        setDeliveryFee(10);
+    }
+
+    function setEditionsBagourd(address a) public onlyOwner {
+        editionsBagourd=a;
+    }
+
+    function setSupportedTokens() public onlyOwner {
+        supportedTokens[USDC]=true;
+        supportedTokens[USDT]=true;
+        supportedTokens[DAI]=true;
+    }
+
+    function supportToken(address token) public onlyOwner {
+        supportedTokens[token] = true;
+    }
+
+    function unsupportToken(address token) public onlyOwner {
+        supportedTokens[token] = false;
+    }
+
+    function updatePrice(uint256 bookId, uint256 price) public onlyOwner {
+        bookIdsToPrices[bookId] = price;
+    }
+
+    function updateQuantity(uint256 bookId, uint256 quantity) public onlyOwner {
+        bookIdsToStocks[bookId] = quantity;
+    }
+
+    function addBook(uint256 bookId, string memory title, uint256 price, uint256 quantity)  public onlyOwner  {
+        Book memory book = Book(bookId, price, title);
+        bookIdsToStocks[bookId] = quantity;
+        bookIdsToPrices[bookId] = price;
+        bookIdsToBooks[bookId] = book;
+    }
+
+    function setDeliveryFee(uint256 fee) public onlyOwner {
+        deliveryFee = fee;
+    }
+
     function getPrices(uint256[] memory bookIds)
-        public
-        view
+        public view
         returns (uint256[] memory)
     {
         uint256[] memory prices = new uint256[](bookIds.length);
@@ -79,35 +101,39 @@ contract BookSelling is Ownable{
         return prices;
     }
 
-    function getDeliveryFee() public view returns (uint256) {
-        return deliveryFee;
-    }
-
     function getAmountToPay(
         uint256[] memory bookIds,
         uint256[] memory quantities
     ) public view
     returns(uint256) {
         uint256[] memory prices = getPrices(bookIds);
-        uint256 amount = sumProd(prices, quantities) + getDeliveryFee();
+        uint256 amount = sumProd(prices, quantities) + deliveryFee;
         return amount;
     }
 
-    function BuyBooks(
+    function checkBooksAreAvailable(uint256[] memory bookIds, uint256[] memory quantities) view public {
+        for (uint256 i = 0; i < bookIds.length; i++) {
+            require(bookIdsToStocks[bookIds[i]]>=quantities[i], "Book out of stock.");
+        }
+    }
+
+    function buyBooks(
         string memory customerName,
         uint256[] memory bookIds,
         uint256[] memory quantities,
         IERC20 erc20
-    ) public payable 
+    ) public 
     {
         require(supportedTokens[address(erc20)], "Token not supported.");
+        require(bookIds.length == quantities.length);
         Customer memory c = Customer(msg.sender, customerName);
+        checkBooksAreAvailable(bookIds, quantities);
         uint256[] memory prices = getPrices(bookIds);
         uint256 date = block.timestamp;
-        Order memory order = Order(bookIds, prices, quantities, date, c);
+        emit order(bookIds, prices, quantities, date, c);
         uint256 amount = getAmountToPay(bookIds, quantities);
-
         erc20.safeTransferFrom(msg.sender, editionsBagourd, amount);
+        emit payment(msg.sender, editionsBagourd, amount);
     }
 
     
