@@ -23,10 +23,12 @@ contract BookSellingTest is Test {
         uint256 price;
         (bookId, price, title) = bookSelling.bookIdsToBooks(1);
         assertTrue(keccak256(bytes(title))==keccak256(bytes("Up From Slavery")));
+        uint256 stocks = bookSelling.bookIdsToStocks(1);
+        console.log(stocks);
+        assertTrue(stocks==20);
     }
 
     function testShouldRevertWhenTryingToBuyOutOfStockBook() public{
-        bookSelling.addBook(1, "Up From Slavery", 14, 10);
         string memory customerName = "Customer1";
         uint256[] memory bookIds = new uint256[](1);
         bookIds[0]=1;
@@ -48,7 +50,6 @@ contract BookSellingTest is Test {
     }
 
     function testShouldBuyBooks() public {
-        bookSelling.addBook(1, "Up From Slavery", 14, 10);
         bookSelling.addBook(2, "Harry Potter", 10, 10);
         bookSelling.addBook(3, "LOTR", 8, 12);
         console.log("book contract",address(bookSelling));
@@ -66,10 +67,10 @@ contract BookSellingTest is Test {
 
         IERC20 usdc = IERC20(address(USDC));
         uint256 startingBalance = usdc.balanceOf(EB);
-        
+        console.log("startingBalance",startingBalance);
         vm.startPrank(CUSTOMER);
         uint256 amountToPay = bookSelling.getAmountToPay(bookIds,quantities);
-        console.log("amount",amountToPay);
+        console.log("amountToPay",amountToPay);
         // customer approving contract
         usdc.approve(address(bookSelling), amountToPay);
 
@@ -80,7 +81,9 @@ contract BookSellingTest is Test {
             usdc
         );
         vm.stopPrank();
-        assertTrue(startingBalance +amountToPay == usdc.balanceOf(EB));
+        console.log("ending balance",usdc.balanceOf(EB));
+        assertTrue(startingBalance + amountToPay == usdc.balanceOf(EB));
+        assertTrue(bookSelling.bookIdsToStocks(1) == 9);
     }
 
     function testShouldRevertWhenTryingToBuyANonExistingBook() public {
