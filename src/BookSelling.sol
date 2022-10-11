@@ -34,14 +34,7 @@ contract BookSelling is Ownable{
         string customerName;
     }
 
-    struct Order {
-        uint256 orderId;
-        Book[] books;
-        uint256 date;
-        Customer customer;
-    }
-
-    event order (uint256, Book[] books, uint256, Customer);
+    event order (uint256, uint256, Book[] books, Customer);
     event invoice (address, address, uint256, uint256);
 
     constructor() Ownable() {
@@ -141,9 +134,11 @@ contract BookSelling is Ownable{
         checkBooksAreAvailable(bookIds, quantities);
         uint256 date = block.timestamp;
         uint256 orderId = getID();
-        Book[] memory books = new Book[](1);
-        books[0] = bookIdsToBooks[bookIds[0]];
-        emit order(orderId, books, date, c);
+        Book[] memory books = new Book[](bookIds.length);
+        for (uint256 i=0; i<bookIds.length;i++){
+            books[i] = bookIdsToBooks[bookIds[i]];
+        }
+        emit order(orderId, date, books, c);
         uint256 amount = getAmountToPay(bookIds, quantities);
         erc20.safeTransferFrom(msg.sender, editionsBagourd, amount);
         emit invoice(msg.sender, editionsBagourd, amount, orderId);
